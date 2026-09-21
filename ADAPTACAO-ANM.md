@@ -1,6 +1,6 @@
 # Apoia → ANM: diagnóstico técnico e plano de adaptação (rascunho)
 
-Data: 2026-09-21
+Data: 2026-09-21 (fase 1) — atualizado 2026-09-21 (fase 2, ver seção 8)
 Base: fork local de `trf2-jus-br/apoia` (branch master, commit `9ce7324`)
 
 ## 1. O que já foi validado neste ambiente
@@ -10,8 +10,12 @@ Base: fork local de `trf2-jus-br/apoia` (branch master, commit `9ce7324`)
 - `npm run typecheck` — **passa limpo**, inclusive após adicionar o rascunho de
   adaptador SEI-ANM (`lib/interop/sei-anm-soap-client.ts`) e a dependência `soap`.
 - Não foi possível subir a aplicação de ponta a ponta (`npm run dev` + banco) neste
-  sandbox porque não há Docker-in-Docker nem Postgres/MySQL disponíveis aqui — isso
-  precisa ser feito num ambiente de desenvolvimento real (local ou de homologação da ANM).
+  sandbox. Investigado na fase 2 (ver seção 8): o Docker em si funciona (o daemon sobe
+  normalmente), mas o `docker pull` de qualquer imagem (ex.: `mysql:8.0.21`) é bloqueado
+  pela política de rede/egress deste ambiente de execução (403 do proxy da organização
+  ao registry do Docker Hub) — **não é uma limitação da ANM nem do código**, é um limite
+  deste sandbox específico. Isso precisa ser feito num ambiente de desenvolvimento real
+  (local ou de homologação da ANM), sem essa restrição de rede.
 
 Conclusão prática: o código é saudável, bem documentado (`AGENTS.md` é um guia de
 arquitetura muito completo) e é uma base segura para fork.
@@ -85,10 +89,18 @@ Arquivo novo: `lib/interop/sei-anm-soap-client.ts`
   1. o WSDL publicado pelo SEI-ANM (path típico:
      `.../sei/controlador_ws.php?servico=sei&wsdl`, a confirmar com a TI da ANM);
   2. o Manual de Web Services na versão instalada na ANM.
-- Depois de validado, o único ponto de integração com o restante da Apoia é trocar,
-  em `lib/interop/sei.ts`, o método privado `consultarProcessoSei` (hoje um `fetch` REST)
-  para chamar `consultarProcedimentoNoSeiAnm` — o resto da classe (`consultarProcesso`,
-  `consultarMetadadosDoProcesso`) não muda.
+- **Atualização fase 2**: essa troca já foi feita. `InteropSEI.init()`
+  (`lib/interop/sei.ts`) agora verifica se `SEI_ANM_WSDL_URL` (eventualmente prefixada
+  por tribunal) está configurada; se sim, usa `consultarProcedimentoNoSeiAnm`/
+  `obterDocumentoBinarioSeiAnm` (fluxo SOAP/ANM), senão mantém o `fetch` REST original
+  (fluxo `SEI_API_URL`/TRF2) intacto. Nenhuma mudança no TRF2 quando a env do SOAP não
+  está setada — é puramente aditivo.
+- **Atualização fase 2**: corrigido um bug de formato de data. O Web Service do SEI
+  retorna datas como `AAAAMMDDHHMMSS` (14 dígitos, sem separadores — confirmado no
+  Manual de Web Services do SEI), enquanto `sei-mapping.ts` espera strings ISO 8601
+  para a correlação documento→andamento e `lib/interop/sei.ts` faz `new Date(dataGeracao)`.
+  `parseSeiDataHora()` (novo, em `sei-anm-soap-client.ts`) faz essa conversão sem impor
+  fuso horário (só reformata os dígitos).
 
 `npm run typecheck` passa limpo com este arquivo incluído.
 
@@ -121,6 +133,32 @@ variáveis correspondentes em `lib/utils/env.ts`. Rodei `npm run typecheck` e
 projeto, nenhum novo). Ainda não testado com um client_id real, porque isso depende
 do credenciamento junto ao gov.br.
 
+**Atualização fase 2 — dois bugs reais encontrados e corrigidos (sem depender de
+credenciais gov.br, só lendo o restante do código de auth):**
+
+1. `assertCourtId()` (`lib/user.ts`) precisa de `user.system` batendo com a env
+   `SYSTEM_MAPPING` (ex. `TRF2:4`) para resolver o tribunal/órgão — senão lança
+   `Não foi possível identificar o tribunal do usuário` em produção. O
+   `CredentialsProvider` já seta `system` explicitamente (`app/api/login/route.ts`),
+   mas o rascunho original do `GovBrProvider` não setava nada, e nem `email` nem
+   `corporativo` de um usuário gov.br batem com as outras heurísticas de
+   `assertCourtId` (regex `@...\.jus\.br`, `corporativo[0].seq_tribunal_pai`). Ou
+   seja: **todo login via gov.br quebraria em produção** ao tentar consultar o SEI.
+   Corrigido: `GovBrProvider` agora seta `system: 'ANM'` por padrão (configurável via
+   `systemCode`, mas não há necessidade de ser dinâmico — instância única). Documentei
+   `SYSTEM_MAPPING="ANM:1"` como obrigatório no `.env.local.example`.
+2. O callback `jwt` (`options.ts`) fazia `jose.decodeJwt(account.access_token)` e, sem
+   try/catch, lia `decodedToken.realm_access.roles` incondicionalmente —
+   `realm_access` é uma claim específica do Keycloak. Qualquer provider cujo
+   `access_token` não seja um JWT nesse formato (gov.br incluído — não há garantia de
+   que o access_token do Login Único seja um JWT com essa claim, e nada nos exemplos
+   analisados sugere que seja) faria esse callback **lançar exceção e derrubar o
+   login inteiro**. Corrigido com try/catch + optional chaining (`realm_access?.roles`);
+   comportamento para Keycloak/PDPJ não muda.
+
+`npm run typecheck`, `npm run lint` (0 erros, 245 warnings pré-existentes) e
+`npm test` (458/458) passam após as duas correções.
+
 ## 6. O que só a ANM consegue destravar (não é código)
 
 1. Confirmar que o **Serviço de Interoperabilidade (Web Service SOAP) do SEI-ANM está
@@ -139,12 +177,45 @@ do credenciamento junto ao gov.br.
 ## 7. Próximos passos sugeridos (ordem)
 
 1. Levantar internamente o WSDL do SEI-ANM e confirmar (com a TI/SEI da ANM) os nomes
-   reais das operações — validar/corrigir `sei-anm-soap-client.ts` contra isso.
+   reais das operações — validar/corrigir `sei-anm-soap-client.ts` contra isso (a
+   integração com `InteropSEI` e o parsing de data já estão prontos, só os nomes de
+   campo/operação do SOAP precisam ser confirmados).
 2. Pedir o cadastro de Sistema Externo no SEI-ANM (credenciais de teste).
-3. Subir um Postgres local (ou usar o `docker-compose.yaml` do próprio repo, que já
-   sobe MySQL) e rodar `npm run dev` de fato, autenticando com o provider Credentials
-   (mais simples que Keycloak para um primeiro teste) para ver a interface funcionando.
+3. Rodar `npm run dev` de fato num ambiente sem a restrição de rede deste sandbox
+   (local ou de homologação da ANM), com um Postgres/MySQL real, autenticando com o
+   provider Credentials (mais simples que Keycloak/gov.br para um primeiro teste) para
+   ver a interface funcionando.
 4. Com credenciais de teste do SEI-ANM em mãos, validar `consultarProcedimentoNoSeiAnm`
    contra um processo real de homologação.
-5. Só então: prompts próprios da ANM, decisão de login definitivo, e avaliação AGPL-3.0
+5. Com client_id/client_secret de staging do Login Único, validar o primeiro login
+   real via `GovBrProvider`.
+6. Só então: prompts próprios da ANM, decisão de login definitivo, e avaliação AGPL-3.0
    com a área jurídica antes de qualquer publicação/distribuição do fork.
+
+## 8. Fase 2 (2026-09-21) — o que deu para avançar sem depender do TI da ANM
+
+Trabalho de continuação, focado no que **não** depende de credenciais/acesso da ANM
+(WSDL do SEI-ANM, cadastro de Sistema Externo, credenciamento gov.br). Resumo — ver
+detalhes inline nas seções 5/5.1 acima:
+
+- `InteropSEI` (`lib/interop/sei.ts`) já chama o cliente SOAP quando `SEI_ANM_WSDL_URL`
+  está configurada (fallback REST do TRF2 preservado, sem mudança de comportamento
+  quando essa env não está setada).
+- Corrigido bug de formato de data (`AAAAMMDDHHMMSS` → ISO 8601) no cliente SOAP.
+- Corrigidos dois bugs reais no fluxo de autenticação que **quebrariam o login gov.br
+  em produção** (detalhes na seção 5.1): `system` ausente no `GovBrProvider` (quebra
+  `assertCourtId`) e `jwt` callback assumindo formato Keycloak sem try/catch.
+- Novo `__tests__/sei-anm-soap-client.test.ts`: mocka o pacote `soap` com uma resposta
+  sintética no formato documentado publicamente do SEI e valida o pipeline completo
+  **SOAP → `SeiInput` → `mapSeiToSimplified`** (a função de mapeamento já existente e
+  testada da Apoia) — incluindo a correlação documento↔andamento por data/hora e a
+  conversão de data. Isso não substitui testar contra um SEI-ANM real, mas comprova que
+  a lógica de mapeamento do cliente é internamente consistente com o resto da Apoia.
+  `npm test`: 26 suites / 458 testes, todos passando.
+- `.env.local.example` atualizado com as novas variáveis (`GOVBR_*`, `SEI_ANM_*`,
+  `SYSTEM_MAPPING`) documentadas e comentadas.
+- Tentei subir a aplicação de ponta a ponta (`docker run mysql:8.0.21` + `npm run dev`)
+  para validar a tela de login com o botão gov.br renderizando. Bloqueado por política
+  de rede deste sandbox (`docker pull` para o Docker Hub retorna 403 no proxy da
+  organização) — não é um bloqueio de código nem da ANM, só deste ambiente específico
+  de execução. Ver seção 1.

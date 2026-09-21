@@ -58,12 +58,20 @@ const authOptions = {
       let iss = undefined as string
 
       if (account?.access_token) {
-        let decodedToken: any = jose.decodeJwt(account?.access_token)
-        if (decodedToken && typeof decodedToken !== "string") {
-          roles = decodedToken.realm_access.roles
-          corporativo = decodedToken.corporativo
-          preferredUsername = decodedToken.preferred_username
-          iss = decodedToken.iss
+        // decodeJwt lança se access_token não for um JWT (ex.: token opaco), e
+        // realm_access é uma claim específica do Keycloak — ausente em outros
+        // providers (ex.: Login Único gov.br). Sem o try/catch e o optional
+        // chaining, login via qualquer provider não-Keycloak quebra aqui.
+        try {
+          const decodedToken: any = jose.decodeJwt(account.access_token)
+          if (decodedToken && typeof decodedToken !== "string") {
+            roles = decodedToken.realm_access?.roles
+            corporativo = decodedToken.corporativo
+            preferredUsername = decodedToken.preferred_username
+            iss = decodedToken.iss
+          }
+        } catch (e) {
+          console.error('Não foi possível decodificar access_token como JWT:', e)
         }
       }
       token = { roles, corporativo, preferredUsername, iss, accessToken: account?.access_token, ...token, ...user }

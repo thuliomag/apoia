@@ -7,23 +7,32 @@ import { InteropProcessoType } from './interop-types'
 import { mapSeiToSimplified, SeiInput } from './sei-mapping'
 import { aggregateProcessos, nivelDeSigiloFromNivel } from './pdpj'
 import { CannotAccessPieceTextError, CannotAccessProcessMetadataError, InvalidProcessNumberError } from '../utils/api-error'
+import { consultarProcedimentoNoSeiAnm, getSeiAnmSoapConfig, obterDocumentoBinarioSeiAnm, SeiAnmSoapConfig } from './sei-anm-soap-client'
 
 const REVALIDATE = undefined
 
 export class InteropSEI implements Interop {
     private accessToken: string
-    private seiApiUrl: string // já contém ?path=/apoia
+    private seiApiUrl: string // já contém ?path=/apoia (fluxo REST, TRF2)
+    private soapConfig: SeiAnmSoapConfig // fluxo SOAP nativo do SEI (ANM), ver sei-anm-soap-client.ts
     private user: UserType
 
     async init() {
         this.user = await getCurrentUser()
-
-        // SEI_API_URL (eventualmente prefixada por tribunal: TRIBUNAL_{seq}_SEI_API_URL)
-        // já vem com ?path=/apoia; as chamadas adicionam /processos/{num}...
         const seqTribunalPai = this.user ? '' + (assertCourtId(this.user)) : undefined
+
+        // Se SEI_ANM_WSDL_URL (eventualmente prefixada por tribunal) estiver configurada,
+        // usa o Web Service SOAP nativo do SEI. Caso contrário, mantém o fluxo REST original
+        // (módulo trf2/sei-rest-api-module, via SEI_API_URL) para não quebrar o TRF2.
+        if (envStringPrefixed('SEI_ANM_WSDL_URL', seqTribunalPai)) {
+            this.soapConfig = getSeiAnmSoapConfig(seqTribunalPai)
+            return
+        }
+
+        // SEI_API_URL já vem com ?path=/apoia; as chamadas adicionam /processos/{num}...
         this.seiApiUrl = envStringPrefixed('SEI_API_URL', seqTribunalPai)
         if (!this.seiApiUrl) {
-            throw new Error('SEI_API_URL não configurada para o tribunal do usuário')
+            throw new Error('SEI_API_URL ou SEI_ANM_WSDL_URL não configurada para o tribunal do usuário')
         }
 
         // Utiliza o mesmo token do DataLake/PDPJ, enviado como Bearer para o SEI.
@@ -49,8 +58,13 @@ export class InteropSEI implements Interop {
         return n
     }
 
-    private consultarProcessoSei = async (numeroDoProcesso: string) => {
+    private consultarProcessoSei = async (numeroDoProcesso: string): Promise<SeiInput> => {
         const num = this.limparEValidarNumeroProcesso(numeroDoProcesso)
+
+        if (this.soapConfig) {
+            return consultarProcedimentoNoSeiAnm(num, this.soapConfig)
+        }
+
         const response = await fetch(
             `${this.seiApiUrl}/processos/${num}`,
             {
@@ -166,6 +180,11 @@ export class InteropSEI implements Interop {
             binary = true
         }
         const numeroDoProcesso = this.limparEValidarNumeroProcesso(numProc)
+
+        if (this.soapConfig) {
+            return obterDocumentoBinarioSeiAnm(idDaPeca, this.soapConfig)
+        }
+
         const response = await fetch(
             `${this.seiApiUrl}/processos/${numeroDoProcesso}/documentos/${idDaPeca}`,
             {

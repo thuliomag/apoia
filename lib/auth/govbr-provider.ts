@@ -56,11 +56,23 @@ export type GovBrProviderOptions = OAuthUserConfig<GovBrProfile> & {
      * conta prata/ouro para liberar acesso administrativo).
      */
     scope?: string
+    /**
+     * Código do "sistema" atribuído a todo usuário autenticado por este provider,
+     * no mesmo campo `system` que o CredentialsProvider já preenche (ver
+     * app/api/login/route.ts). `lib/user.ts` (assertCourtId) usa esse código para
+     * resolver o tribunal/órgão via a env SYSTEM_MAPPING (ex.: "ANM:1"), o mesmo
+     * mecanismo que outros tribunais (TRF2, TRE-MG, ...) já usam — sem isso,
+     * assertCourtId lança "Não foi possível identificar o tribunal do usuário"
+     * em produção para todo login via gov.br. Default 'ANM' porque este fork é de
+     * instância única (ver seção 4 do ADAPTACAO-ANM.md); não precisa ser dinâmico.
+     */
+    systemCode?: string
 }
 
 export default function GovBrProvider(options: GovBrProviderOptions): OAuthConfig<GovBrProfile> {
     const base = options.issuerBaseUrl.replace(/\/$/, '')
     const scope = options.scope ?? 'openid email profile'
+    const systemCode = options.systemCode ?? 'ANM'
 
     return {
         id: 'govbr',
@@ -87,6 +99,7 @@ export default function GovBrProvider(options: GovBrProviderOptions): OAuthConfi
                 // Campos abaixo seguem o padrão que `lib/user.ts` (UserType) já espera
                 // de outros providers, para minimizar mudanças no resto do código:
                 preferredUsername: profile.sub,
+                system: systemCode,
             } as any
         },
         clientId: options.clientId,

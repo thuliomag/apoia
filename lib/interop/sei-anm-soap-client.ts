@@ -50,12 +50,30 @@ export function getSeiAnmSoapConfig(seqOrgao?: string): SeiAnmSoapConfig {
     }
 }
 
-let clientCache: soap.Client | undefined
+const clientCache = new Map<string, soap.Client>()
 
 async function getSoapClient(wsdlUrl: string): Promise<soap.Client> {
-    if (clientCache) return clientCache
-    clientCache = await soap.createClientAsync(wsdlUrl)
-    return clientCache
+    const cached = clientCache.get(wsdlUrl)
+    if (cached) return cached
+    const client = await soap.createClientAsync(wsdlUrl)
+    clientCache.set(wsdlUrl, client)
+    return client
+}
+
+/**
+ * O Web Service do SEI retorna datas/horas no formato "AAAAMMDDHHMMSS" (14 dígitos,
+ * sem separadores — confirmado no Manual de Web Services do projeto SEI, mesmo padrão
+ * usado nos parâmetros DataInicio/DataFim das operações de consulta). Convertemos para
+ * ISO 8601 para que `new Date(data.dataGeracao)` (lib/interop/sei.ts) e a correlação
+ * documento→andamento por dataHora (lib/interop/sei-mapping.ts, que compara strings
+ * ISO) funcionem como o resto da Apoia espera.
+ */
+function parseSeiDataHora(seiDataHora: string | undefined): string | undefined {
+    if (!seiDataHora) return undefined
+    const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/.exec(seiDataHora)
+    if (!m) return seiDataHora // formato inesperado: repassa como veio, para não mascarar o dado real
+    const [, ano, mes, dia, hora, minuto, segundo] = m
+    return `${ano}-${mes}-${dia}T${hora}:${minuto}:${segundo}`
 }
 
 /**
@@ -72,6 +90,10 @@ async function getSoapClient(wsdlUrl: string): Promise<soap.Client> {
  *  - Mapeamento de cada campo do retorno SOAP (em XML/objeto aninhado) para os campos
  *    de `SeiAndamento`/`SeiDocumento` abaixo — feito de forma ilustrativa, não validada.
  *  - Paginação/streaming para processos com muitos documentos.
+ *
+ * Já tratado (validado com o formato documentado publicamente pelo SEI, não contra
+ * uma instância real): datas/horas retornadas como "AAAAMMDDHHMMSS" são convertidas
+ * para ISO 8601 por `parseSeiDataHora()`, para casar com o que `sei-mapping.ts` espera.
  */
 export async function consultarProcedimentoNoSeiAnm(
     numeroProcesso: string,
@@ -110,7 +132,7 @@ export async function consultarProcedimentoNoSeiAnm(
     // observado em integrações SEI públicas; validar contra a resposta real.
     const andamentos: SeiAndamento[] = (procedimento.Andamentos?.Andamento || procedimento.andamentos || []).map((a: any) => ({
         sequencia: Number(a.Sequencia ?? a.sequencia),
-        dataHora: a.DataHora ?? a.dataHora,
+        dataHora: parseSeiDataHora(a.DataHora ?? a.dataHora),
         descricao: a.Descricao ?? a.descricao,
         idTarefa: a.IdTarefa ? Number(a.IdTarefa) : undefined,
     }))
@@ -125,7 +147,7 @@ export async function consultarProcedimentoNoSeiAnm(
         nivelSigilo: d.NivelAcesso ?? d.nivelSigilo ?? '0',
         mimeType: d.Mime ?? d.mimeType ?? 'application/octet-stream',
         nomeArquivo: d.Nome ?? d.nomeArquivo ?? '',
-        dataHora: d.DataHora ?? d.dataHora,
+        dataHora: parseSeiDataHora(d.DataHora ?? d.dataHora),
     }))
 
     const seiInput: SeiInput = {
@@ -136,7 +158,7 @@ export async function consultarProcedimentoNoSeiAnm(
             id: Number(procedimento.TipoProcedimento?.Id ?? 0),
             nome: procedimento.TipoProcedimento?.Nome ?? '',
         },
-        dataGeracao: procedimento.DataAutuacao ?? procedimento.DataGeracao,
+        dataGeracao: parseSeiDataHora(procedimento.DataAutuacao ?? procedimento.DataGeracao),
         orgao: {
             sigla: procedimento.UnidadeAtual?.Sigla ?? '',
             nome: procedimento.UnidadeAtual?.Descricao ?? '',
