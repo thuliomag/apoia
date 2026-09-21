@@ -28,6 +28,16 @@ enum EnvPublicEnum {
     DATALAKE_API_URL,
     SEI_API_URL,
 
+    // Rascunho fork ANM — login via Login Único gov.br (ver lib/auth/govbr-provider.ts)
+    GOVBR_ISSUER_BASE_URL,
+    GOVBR_CLIENT_ID,
+    GOVBR_SCOPE,
+
+    // Rascunho fork ANM — cliente SOAP para o SEI-ANM (ver lib/interop/sei-anm-soap-client.ts)
+    SEI_ANM_WSDL_URL,
+    SEI_ANM_SIGLA_SISTEMA,
+    SEI_ANM_ID_UNIDADE,
+
     APP_CODE,
     APP_PORT,
     APP_REGISTRY_PORT,
@@ -60,6 +70,11 @@ enum EnvPrivateEnum {
     DATALAKE_CLIENT_ID,
     DATALAKE_CLIENT_SECRET,
     KEYCLOAK_CREDENTIALS_SECRET,
+
+    // Rascunho fork ANM
+    GOVBR_CLIENT_SECRET,
+    SEI_ANM_IDENTIFICACAO_SERVICO,
+
     APP_HOST,
     APP_REGISTRY_HOST,
     TESTS_PATH,

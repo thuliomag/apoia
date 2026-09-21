@@ -1,5 +1,6 @@
 import CredentialsProvider from "next-auth/providers/credentials"
 import KeycloakProvider from "next-auth/providers/keycloak"
+import GovBrProvider from "@/lib/auth/govbr-provider"
 // import jwt from 'jsonwebtoken'
 import * as jose from "jose"
 import { envString } from "@/lib/utils/env"
@@ -159,6 +160,20 @@ if (envString('KEYCLOAK_ISSUER')) {
     clientId: 'apoia',
     clientSecret: envString('KEYCLOAK_CREDENTIALS_SECRET') as string,
     issuer: envString('KEYCLOAK_ISSUER'),
+  }))
+
+}
+
+// RASCUNHO (fork ANM): login via Login Único gov.br, no lugar do Keycloak/PDPJ.
+// Ver lib/auth/govbr-provider.ts para o detalhamento e o que falta validar
+// (client_id/client_secret reais, endpoint de produção vs. staging).
+if (envString('GOVBR_ISSUER_BASE_URL')) {
+
+  authOptions.providers.push(GovBrProvider({
+    issuerBaseUrl: envString('GOVBR_ISSUER_BASE_URL') as string,
+    clientId: envString('GOVBR_CLIENT_ID') as string,
+    clientSecret: envString('GOVBR_CLIENT_SECRET') as string,
+    scope: envString('GOVBR_SCOPE'),
   }))
 
 }
