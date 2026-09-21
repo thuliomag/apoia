@@ -186,4 +186,40 @@ if (envString('GOVBR_ISSUER_BASE_URL')) {
 
 }
 
+// Login local só para desenvolvimento (fork ANM): permite testar o modo
+// ADMINISTRATIVO/SEI de ponta a ponta (auth → /adm → InteropSEI) sem depender de
+// Keycloak/PDPJ, MNI ou do credenciamento gov.br — nenhum dos três a ANM tem hoje.
+// Duplo gate (NODE_ENV=development E a env explícita) para nunca virar um login
+// sem senha por acidente fora do ambiente local de um desenvolvedor.
+//
+// Objeto de provider "cru" (não usa o factory CredentialsProvider()): o factory do
+// NextAuth v4 sempre devolve { id: 'credentials', name: 'Credentials', ... } no nível
+// superior — seu id/name customizados só existem dentro de `.options`. A tela de login
+// (app/(main)/auth/signin/page.jsx) decide o que renderizar checando literalmente
+// `provider.name === "Credentials"` na lista crua de `authOptions.providers` (sem
+// passar pelo unwrap que o próprio NextAuth faz internamente) — com o factory, este
+// provider seria classificado junto com o antigo CredentialsProvider (SYSTEMS) e
+// cairia no formulário genérico de MNI (system/matrícula/senha, rótulo fixo "Eproc"),
+// nunca aparecendo como botão próprio. Um objeto cru evita esse acoplamento.
+if (process.env.NODE_ENV === 'development' && envString('DEV_LOCAL_LOGIN')) {
+
+  authOptions.providers.push({
+    id: 'dev-local',
+    name: 'Login local (dev)',
+    type: 'credentials',
+    credentials: {},
+    async authorize() {
+      return {
+        id: 'dev-local',
+        name: 'Dev Local',
+        email: 'dev-local@anm.gov.br',
+        preferredUsername: 'dev-local',
+        system: 'ANM',
+        encryptedPassword: undefined,
+      } as any
+    },
+  } as any)
+
+}
+
 export default authOptions

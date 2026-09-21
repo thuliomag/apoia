@@ -9,13 +9,14 @@ Base: fork local de `trf2-jus-br/apoia` (branch master, commit `9ce7324`)
 - `npm install` — 1741 pacotes, sem erros (Node 20/22, ~45s).
 - `npm run typecheck` — **passa limpo**, inclusive após adicionar o rascunho de
   adaptador SEI-ANM (`lib/interop/sei-anm-soap-client.ts`) e a dependência `soap`.
-- Não foi possível subir a aplicação de ponta a ponta (`npm run dev` + banco) neste
-  sandbox. Investigado na fase 2 (ver seção 8): o Docker em si funciona (o daemon sobe
-  normalmente), mas o `docker pull` de qualquer imagem (ex.: `mysql:8.0.21`) é bloqueado
-  pela política de rede/egress deste ambiente de execução (403 do proxy da organização
-  ao registry do Docker Hub) — **não é uma limitação da ANM nem do código**, é um limite
-  deste sandbox específico. Isso precisa ser feito num ambiente de desenvolvimento real
-  (local ou de homologação da ANM), sem essa restrição de rede.
+- **Atualização fase 3 (ver seção 9): a aplicação SOBE de ponta a ponta neste sandbox,
+  sem Docker.** O `docker pull` de qualquer imagem (ex.: `mysql:8.0.21`) é bloqueado pela
+  política de rede/egress deste ambiente (403 do proxy ao registry do Docker Hub) — não é
+  limitação da ANM nem do código, é só deste sandbox. Mas o sandbox já tinha PostgreSQL 16
+  instalado nativamente (sem Docker), e isso foi suficiente: login local, modo ADM/SEI e o
+  `InteropSEI` (incluindo o cliente SOAP novo) foram validados rodando de verdade, num
+  browser real. Ver seção 9 para o passo a passo (reproduzível em qualquer máquina com
+  Node + Postgres OU Docker, sem depender de nada da ANM).
 
 Conclusão prática: o código é saudável, bem documentado (`AGENTS.md` é um guia de
 arquitetura muito completo) e é uma base segura para fork.
@@ -214,8 +215,115 @@ detalhes inline nas seções 5/5.1 acima:
   `npm test`: 26 suites / 458 testes, todos passando.
 - `.env.local.example` atualizado com as novas variáveis (`GOVBR_*`, `SEI_ANM_*`,
   `SYSTEM_MAPPING`) documentadas e comentadas.
-- Tentei subir a aplicação de ponta a ponta (`docker run mysql:8.0.21` + `npm run dev`)
-  para validar a tela de login com o botão gov.br renderizando. Bloqueado por política
-  de rede deste sandbox (`docker pull` para o Docker Hub retorna 403 no proxy da
-  organização) — não é um bloqueio de código nem da ANM, só deste ambiente específico
-  de execução. Ver seção 1.
+- Tentei subir a aplicação de ponta a ponta via Docker (`docker run mysql:8.0.21`);
+  bloqueado por política de rede deste sandbox (`docker pull` para o Docker Hub retorna
+  403). **Retomado e concluído na fase 3 (seção 9) usando PostgreSQL nativo (sem
+  Docker)** — a aplicação sobe e o modo ADM/SEI foi validado de verdade.
+
+## 9. Fase 3 (2026-09-21) — aplicação rodando de ponta a ponta, validada num browser real
+
+Objetivo desta fase: responder à pergunta "dá para testar localmente, sem depender da
+TI da ANM?" com uma resposta concreta — não só "deveria funcionar", mas rodando de
+verdade e clicando na tela. Resultado: **sim, dá**, e o passo a passo abaixo é
+reproduzível em qualquer máquina (a própria, não precisa ser este sandbox).
+
+### 9.1. Sem Docker: PostgreSQL nativo é suficiente
+
+O sandbox já tinha PostgreSQL 16 instalado (sem Docker). Isso bastou:
+
+```bash
+service postgresql start   # ou: pg_ctlcluster 16 main start, fora de containers
+psql -U postgres -c "ALTER USER postgres PASSWORD 'apoia';"
+psql -U postgres -c "CREATE DATABASE apoia;"
+```
+
+Numa máquina com Docker funcionando normalmente (fora deste sandbox), o
+`docker-compose.yaml` do próprio repo também deve funcionar — a restrição de rede era
+só daqui.
+
+### 9.2. Bug real encontrado: bootstrap do PostgreSQL do zero estava quebrado
+
+`migrations/postgres/knex/` (a pasta que `lib/migrate-on-start.ts` roda automaticamente)
+**começa em `migration-009.sql`** — as migrations 001 a 008 nunca foram portadas do lado
+MySQL (`migrations/mysql/knex/`, que tem 001-033 completo). Rodar `migrations/postgres/init.sql`
+(o snapshot base) e deixar a aplicação migrar sozinha falhava na `migration-020.sql`,
+que já assume a coluna `ia_prompt.is_latest` (entre outras) existindo — coluna que só é
+criada pela `migration-007.sql` do lado MySQL, sem equivalente Postgres.
+
+**Corrigido**: criei `migrations/postgres/knex/migration-007.sql` e `migration-008.sql`,
+traduzindo o conteúdo real das equivalentes MySQL (`is_latest`/`share` em `ia_prompt`,
+tabela `ia_favorite`, colunas novas em `ia_user`, tabela `ia_user_daily_usage`) para
+sintaxe Postgres (`BOOLEAN` em vez de `TINYINT(1)`, coluna gerada `GENERATED ALWAYS AS
+(...) STORED` com `COALESCE` em vez de `IFNULL`, etc.). Com isso, um Postgres novo
+migra do zero, de `init.sql` até a migration mais recente, numa única execução —
+confirmado com `[migrate] OK em ~100ms` num banco recém-criado. Isso é útil para
+qualquer um (TRF2 incluso) que tente rodar Postgres do zero; considerar reportar
+upstream.
+
+### 9.3. Login local só-para-dev (sem Keycloak, sem PDPJ, sem gov.br)
+
+Adicionado em `app/api/auth/[...nextauth]/options.ts`, atrás de duplo gate
+(`NODE_ENV=development` **e** a env `DEV_LOCAL_LOGIN=1`, nunca ativo em produção): um
+provider de "login local" que autentica com um clique, sem credenciais externas, e seta
+`system: 'ANM'` (igual ao `GovBrProvider`, resolvido via `SYSTEM_MAPPING`). Necessário
+porque, como já registrado na seção 5.1/8, a Apoia hoje não tem NENHUM jeito de logar
+sem Keycloak/PDPJ, MNI/Balcaojus ou gov.br — nenhum dos três a ANM tem.
+
+**Dois bugs reais encontrados e corrigidos ao implementar isso** (achados testando de
+verdade, não hipotéticos):
+
+1. `CredentialsProvider(...)` (o factory do NextAuth v4) sempre devolve
+   `{ id: 'credentials', name: 'Credentials', ... }` no nível superior — o `id`/`name`
+   customizados passados para o factory ficam escondidos dentro de `.options`, não no
+   objeto que o resto da Apoia lê diretamente. A tela de login
+   (`app/(main)/auth/signin/page.jsx`) decide o que renderizar checando literalmente
+   `provider.name === "Credentials"` na lista crua — com o factory, o provider de dev
+   caía sempre no formulário antigo de MNI (`credentials-form.tsx`, rótulo fixo
+   "Login com credenciais do Eproc"), nunca aparecia como botão próprio. Corrigido
+   construindo o provider como objeto plano (sem passar pelo factory), o que também é
+   o padrão suportado pelo NextAuth v4 para providers customizados.
+2. `DATABASE_SECRET` (usada por `encryptWithDatabaseSecret`, `lib/utils/env.ts`) não
+   estava documentada em `.env.local.example` e, sem ela, `components/user-menu.tsx`
+   quebra o render de QUALQUER página (inclusive a tela de login, que usa o mesmo
+   layout) com `Cryptr: secret must be a non-0-length string`. Adicionada ao
+   `.env.local.example`.
+
+### 9.4. Validação de ponta a ponta com browser real (Playwright/Chromium headless)
+
+Com o servidor rodando (`npm run dev`) e `DEV_LOCAL_LOGIN=1` + `SYSTEM_MAPPING=ANM:1`
+no `.env.local`:
+
+1. Login via "Acessar com Login local (dev)" — cookie de sessão criado, redireciona
+   para `/`.
+2. `/adm` renderiza a home em modo ADMINISTRATIVO ("Chat Administrativo", "Prompts",
+   "Biblioteca" etc.), com o menu mostrando "Dev Local/ANM" — confirma que login →
+   `system: 'ANM'` → roteamento de modo `/adm` → `x-apoia-mode` (proxy.ts) estão todos
+   conectados.
+3. Chamando a API de processo em modo ADM (`GET /adm/api/v1/process/{numero}`)
+   **sem** `SEI_ANM_WSDL_URL`/`SEI_API_URL` configuradas: retorna exatamente
+   `{"errorMsg":"SEI_API_URL ou SEI_ANM_WSDL_URL não configurada para o tribunal do
+   usuário"}` — a mensagem de erro escrita em `lib/interop/sei.ts`, não um crash. Prova
+   que `getInterop` resolveu `InteropSEI`, que `assertCourtId` resolveu o tribunal via
+   `SYSTEM_MAPPING`, e que o guard de configuração funciona.
+4. Configurando `SEI_ANM_WSDL_URL=http://localhost:9/...` (porta proposital sem nada
+   escutando) e repetindo a chamada: o erro muda para `"connect ECONNREFUSED
+   127.0.0.1:9"` — prova que **o caminho SOAP** (`sei-anm-soap-client.ts`), e não mais
+   o REST legado, foi o que rodou. É a confirmação mais forte possível, sem um SEI-ANM
+   real, de que a integração de ponta a ponta (login → modo → InteropSEI → cliente
+   SOAP) está toda conectada corretamente.
+
+### 9.5. Como reproduzir na sua máquina
+
+1. `git clone` do fork, `git checkout anm-adaptacao`, `npm install`.
+2. Postgres local (nativo ou via `docker-compose.yaml`) numa base `apoia`.
+3. `psql -f migrations/postgres/init.sql` (schema base) — as migrations 001-008 novas já
+   estão em `migrations/postgres/knex/`, não precisa de mais nenhum passo manual.
+4. `.env.local` com `DB_CLIENT=pg`, `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_PASSWORD`/`DB_DATABASE`,
+   `NEXTAUTH_SECRET`/`JWT_SECRET`/`PWD_SECRET`/`DATABASE_SECRET` (qualquer string
+   aleatória para teste local — `openssl rand -hex 32`), `MIGRATE_ON_START=1`,
+   `DEV_LOCAL_LOGIN=1`, `SYSTEM_MAPPING=ANM:1`. Ver `.env.local.example`.
+5. `npm run dev`, abrir `http://localhost:8081/auth/signin`, clicar em "Acessar com
+   Login local (dev)", depois ir para `/adm`.
+6. Quando tiver o WSDL real do SEI-ANM (seção 6, item 1): setar `SEI_ANM_WSDL_URL` e
+   as demais `SEI_ANM_*` e testar `consultarProcedimentoNoSeiAnm` contra um processo
+   real — é o único passo que falta e que só a ANM destrava.
