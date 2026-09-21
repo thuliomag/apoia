@@ -7,17 +7,16 @@ import Link from 'next/link'
 import UserMenuSignout from './user-menu-signout'
 import { unstable_noStore as noStore } from 'next/cache'
 import { NavigationLink } from './NavigationLink';
-import { encryptWithDatabaseSecret, envString, envStringPrefixed } from '@/lib/utils/env';
+import { encryptWithDatabaseSecret, envString } from '@/lib/utils/env';
 import { maiusculasEMinusculas, primeiroEUltimoNome } from '@/lib/utils/utils';
 import WootricSurvey from './wootric-survey';
-import { assertCourtId, getCurrentUser, isUserCorporativo, isUserModerator } from '@/lib/user';
+import { getCurrentUser, isUserCorporativo, isUserModerator } from '@/lib/user';
 import { getSelectedModelName, getSelectedModelParams } from '@/lib/ai/model-server';
 import { getAnonymize, getMode, getModeUrl, isBetaTester } from '@/lib/utils/prefs';
 import ErrorSpan from './error-span';
 import TicketFormButton from './ticket-form';
 import UserMenuAnonymize from './user-menu-anonymize';
 import UserMenuBetaTester from './user-menu-beta-tester';
-import UserMenuMode from './user-menu-mode';
 import ModeLink from './mode-link';
 
 export default async function UserMenu({ }: {}) {
@@ -36,9 +35,6 @@ export default async function UserMenu({ }: {}) {
         const mode = await getMode()
         const betaTester = await isBetaTester()
         const isAdministrative = mode === 'ADMINISTRATIVO'
-
-        const seqTribunalPai = user ? '' + (assertCourtId(user)) : undefined
-        const hasSeiApiUrl = !!envStringPrefixed('SEI_API_URL', seqTribunalPai)
 
         const nonCorporateUser = user && !(await isUserCorporativo(user))
         const moderator = user ? await isUserModerator(user) : false
@@ -83,7 +79,8 @@ export default async function UserMenu({ }: {}) {
                             <ul className="dropdown-menu  dropdown-menu-end" aria-labelledby="navbarDropdown">
                                 <li><ModeLink className="dropdown-item" href="/prefs">Modelo de IA{model && ` (${model})`}</ModeLink></li>
                                 <UserMenuAnonymize isAnonymized={isAnonymized} />
-                                {hasSeiApiUrl && <UserMenuMode />}
+                                {/* Fork ANM: ADMINISTRATIVO é o único modo (ver proxy.ts) — o toggle
+                                    "Modo SEI!" não tem mais para onde alternar, então fica oculto. */}
                                 {betaTester && <UserMenuBetaTester isBetaTester={betaTester} />}
                                 {user && <li><TicketFormButton label="Ajuda / Abrir chamado" className="dropdown-item" userName={user.name} userEmail={user.email} /></li>}
                                 {user && <li><ModeLink className="dropdown-item" href="/tickets">Meus chamados</ModeLink></li>}

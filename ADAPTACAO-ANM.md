@@ -484,3 +484,62 @@ npm run dev
   `lsof -i :8081` para achar o processo e `kill <PID>`.
 - Erro de migration ao rodar `npm run dev` pela primeira vez → confirme que rodou o
   passo 4 (`init.sql`) antes.
+
+## 12. Fase 4 (2026-09-21) — modo ADMINISTRATIVO como único modo
+
+Feedback do usuário testando localmente pela primeira vez: mesmo com a marca trocada
+(seção 10), a aplicação ainda "parecia muito jurídica" — porque, sem o prefixo `/adm`
+na URL, ela cai no modo JUDICIAL por padrão, que mostra ferramentas como Sentença,
+Voto, Ementa e Degravação (`app/(main)/page.tsx`, itens com `mode: 'JUDICIAL'`). Como
+a ANM nunca terá acesso ao PDPJ/DataLake (é exclusivo do Judiciário), esse modo nunca
+teria dados reais para mostrar — só confundia.
+
+**Corrigido**: `proxy.ts` agora define `x-apoia-mode: ADMINISTRATIVO` também para URLs
+sem o prefixo `/adm` (antes, o header era removido nesse caso, caindo no default
+JUDICIAL de `getMode()`, `lib/utils/prefs.ts`). Ou seja, **ADMINISTRATIVO passou a ser
+o único modo** deste fork — `/adm` continua funcionando (aponta pro mesmo lugar), mas
+não é mais necessário. Isso já filtra automaticamente todas as ferramentas
+`mode: 'JUDICIAL'` do menu/home (a lógica de filtro já existia, só o valor padrão
+mudou) e some o link "Ementa" do menu superior. Também removido o toggle "Modo SEI!"
+do menu do usuário (`components/user-menu.tsx`/`user-menu-mode.tsx`) — não tem mais
+para onde alternar. Reverter é uma linha só em `proxy.ts` (comentário explica onde).
+
+`npm run check` (0 erros, 244 warnings — 1 a menos que antes, já que o toggle removido
+também removia um warning pré-existente) e `npm test` (458/458) passam. Validado num
+browser real: `http://localhost:8081/` (raiz, sem prefixo) já mostra a home em modo
+administrativo, sem nenhuma ferramenta judicial.
+
+## 13. Ideia de integração levantada pelo usuário: legislação/ementário da ANM
+
+O usuário sugeriu integrar o SIA-ANM ao **Datalegis da ANM**
+(`anmlegis.datalegis.net`), que publica:
+
+1. **Ementário do dia** — atos normativos/portarias recentes da ANM
+   (`ActionDatalegis.php?acao=abrirEmentarioANM&cod_modulo=566&cod_menu=8303`).
+2. **Busca livre de legislação** — pesquisa textual na legislação da ANM
+   (`ActionDatalegis.php?acao=abrirLegislacao&cod_menu=8014&cod_modulo=351`).
+
+Isso seria análogo à integração já existente na Apoia com a "busca semântica de temas
+de repercussão geral (STF) e recursos especiais repetitivos (STJ)" (env
+`SEMANTIC_SEARCH_API_URL`, citada em `.env.local.example`) — um precedente direto de
+que o projeto já sabe plugar uma fonte de pesquisa jurídica externa como ferramenta
+para a IA consultar.
+
+**Status: não investigado ainda.** Tentei inspecionar as duas URLs para ver se é HTML
+puro (precisaria de scraping), se tem algum parâmetro de busca por GET reutilizável,
+ou se existe uma API/RSS por trás — mas `anmlegis.datalegis.net` está fora da lista de
+domínios permitidos pela política de rede deste sandbox (mesmo tipo de bloqueio do
+Docker Hub, seção 1), então não consegui nem abrir a página daqui.
+
+**Próximo passo**: você (ou alguém com acesso normal à internet) abrir essas duas URLs
+e me dizer:
+- Na página do ementário: existe uma tabela com data/número/ementa? Tem algum link
+  "íntegra" apontando pra PDF? Tem paginação (e se sim, é por parâmetro de URL, tipo
+  `?pagina=2`)?
+- Na página de busca livre: o formulário de busca é GET (URL de resultado
+  reutilizável, tipo `.../busca?termo=lavra`) ou POST (precisaria simular o
+  formulário)? Existe algum jeito de pedir o resultado em JSON/XML?
+
+Com isso eu já consigo desenhar se dá pra fazer uma integração simples (só montar uma
+URL de busca e extrair o HTML do resultado, parecido com `SEMANTIC_SEARCH_API_URL`) ou
+se precisa de scraping mais elaborado.
