@@ -24,12 +24,10 @@ export async function generateMetadata(
     parent: ResolvingMetadata
 ): Promise<Metadata> {
     const metadata: Metadata = {
-        title: { default: 'Apoia', template: '%s | Apoia' },
+        title: { default: 'SIA-ANM', template: '%s | SIA-ANM' },
         openGraph: {
-            title: 'Apoia',
-            description: 'Apoia',
-            url: 'https://apoia.pdpj.jus.br',
-            images: ['https://apoia.pdpj.jus.br/apoia-logo-transp.png'],
+            title: 'SIA-ANM',
+            description: 'Sistema de Inteligência Artificial da ANM',
         }
     }
     return metadata;

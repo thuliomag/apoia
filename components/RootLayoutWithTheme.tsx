@@ -4,7 +4,6 @@ import NextAuthProvider from "@/app/context/nextAuthProvider"
 import GlobalProviders from './GlobalProviders'
 import UserMenu from "@/components/user-menu"
 import Link from 'next/link'
-import Image from 'next/image'
 import { GoogleAnalytics } from '@next/third-parties/google'
 import { envString } from "@/lib/utils/env"
 import NonCorporateUserWarning from "@/components/non-corporate-user-warning"
@@ -58,8 +57,8 @@ export default async function RootLayoutWithTheme({
         >
           <Container fluid={false}>
             <div className="navbar-brand pt-0 pb-0" style={{ overflow: "hidden" }}>
-              <ModeLink href="/" className="ms-0 me-0" style={{ verticalAlign: "middle" }}>
-                <Image src="/apoia-logo-vertical-transp.png" width={48 * 1102 / 478} height={48} alt="Apoia — página inicial" className="me-0" style={{}} />
+              <ModeLink href="/" className="ms-0 me-0 text-decoration-none fw-bold fs-4" style={{ verticalAlign: "middle" }} aria-label="SIA-ANM — página inicial">
+                SIA-ANM
               </ModeLink>
             </div>
             <button className="navbar-toggler d-print-none" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Alternar navegação">
@@ -70,7 +69,7 @@ export default async function RootLayoutWithTheme({
         </Navbar></header>}
         <Suspense fallback={null}><NonCorporateUserWarning /></Suspense>
         <Suspense fallback={null}><PrefsMigrator /></Suspense>
-        {serviceMonitor.isDown() && <div className="alert alert-warning mb-0" role="alert"><div className="p-2 mb-0 container"><div className="row"><div className="col col-auto"><strong>Atenção:</strong> A Apoia está enfrentando dificuldades para acessar os serviços do Codex/DataLake. Por favor, tente novamente mais tarde.</div></div></div></div>}
+        {serviceMonitor.isDown() && <div className="alert alert-warning mb-0" role="alert"><div className="p-2 mb-0 container"><div className="row"><div className="col col-auto"><strong>Atenção:</strong> O SIA-ANM está enfrentando dificuldades para acessar os serviços do Codex/DataLake. Por favor, tente novamente mais tarde.</div></div></div></div>}
         <GlobalProviders appValue={appValue}>
           <main id="conteudo-principal">
             {children}

@@ -25,10 +25,8 @@ export async function generateMetadata(
 ): Promise<Metadata> {
     const metadata: Metadata = {
         openGraph: {
-            title: 'Apoia',
-            description: 'Apoia',
-            url: 'https://apoia.pdpj.jus.br',
-            images: ['https://apoia.pdpj.jus.br/apoia-logo-transp.png'],
+            title: 'SIA-ANM',
+            description: 'Sistema de Inteligência Artificial da ANM',
         }
     }
     return metadata;

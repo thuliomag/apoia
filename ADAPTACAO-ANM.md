@@ -1,6 +1,6 @@
 # Apoia → ANM: diagnóstico técnico e plano de adaptação (rascunho)
 
-Data: 2026-09-21 (fase 1) — atualizado 2026-09-21 (fase 2, ver seção 8)
+Data: 2026-09-21 (fase 1) — atualizado 2026-09-21 (fases 2 e 3, ver seções 8-10)
 Base: fork local de `trf2-jus-br/apoia` (branch master, commit `9ce7324`)
 
 ## 1. O que já foi validado neste ambiente
@@ -327,3 +327,47 @@ no `.env.local`:
 6. Quando tiver o WSDL real do SEI-ANM (seção 6, item 1): setar `SEI_ANM_WSDL_URL` e
    as demais `SEI_ANM_*` e testar `consultarProcedimentoNoSeiAnm` contra um processo
    real — é o único passo que falta e que só a ANM destrava.
+
+## 10. Fase 3 (2026-09-21) — identidade própria (SIA-ANM), não a marca do TRF2
+
+Feedback do usuário: o fork estava usando a marca do TRF2 (nome "Apoia", logo, texto de
+login mencionando "credenciais do CNJ" — algo específico da Justiça, sem sentido para a
+ANM). Objetivo declarado: aproveitar o *trabalho e a expertise* já existentes (o motor
+por trás da ferramenta), mas construir algo próprio da ANM desde já — que depois, se
+fizer sentido, seja levado para virar um projeto institucional.
+
+Decisão (com o usuário): nome **SIA-ANM** (Sistema de Inteligência Artificial da ANM);
+por ora só o essencial de marca — sem desenhar logo nova, só tirar o que é do TRF2 e pôr
+algo neutro no lugar. Alterado:
+
+- Nome/título em `app/(main)/layout.tsx` e `app/(sidekick)/layout.tsx` (metadata,
+  `<title>`, Open Graph) — antes apontava até para o domínio de produção do TRF2
+  (`apoia.pdpj.jus.br`).
+- Logo do cabeçalho (`components/RootLayoutWithTheme.tsx`) e da tela de login
+  (`app/(main)/auth/signin/page.jsx`): as imagens do TRF2 (`apoia-logo-*.png`) foram
+  trocadas por um wordmark em texto ("SIA-ANM") — sem depender de nenhuma arte nova.
+- Tela de login (`app/(main)/auth/signin/provider.tsx`): removido o texto fixo "Login
+  com credenciais do CNJ" (CNJ = Conselho Nacional de Justiça — não se aplica à ANM).
+- Home (`app/(main)/page.tsx`): texto de boas-vindas e "Sobre" reescritos para a ANM
+  (antes dizia literalmente "para Magistrados e Servidores do Poder Judiciário" e
+  "Integrada a sistemas do Judiciário, como o DataLake/Codex" — ambos incorretos para
+  a ANM). Mantido, com crédito explícito: um parágrafo linkando o repositório e o
+  manual originais do TRF2, deixando claro que o SIA-ANM é um fork e que a
+  documentação deles ainda vale para a maior parte das funcionalidades (prompts,
+  biblioteca, revisão de texto) — só a integração com o SEI é própria da ANM.
+
+**Não alterado nesta fase** (por ser código morto para a ANM, ou por ainda ser
+documentação útil, não "marca"): os textos/links de manual do TRF2 espalhados em
+páginas mais profundas (`app/(main)/batch/page.tsx`, `mcp/McpPage.tsx`,
+`components/non-corporate-user-warning.tsx`, `components/api-key-missing.tsx` etc.) —
+continuam apontando para `trf2.gitbook.io/apoia`, que ainda documenta corretamente como
+usar prompts, biblioteca, revisão de texto etc.; a UI do login MNI/Eproc
+(`credentials-form.tsx`) — nunca aparece para a ANM, pois depende da env `SYSTEMS`, que
+não é setada aqui; textos legais citando a Resolução CNJ nº 615/2025 sobre uso de IA
+(`components/error-message.tsx`, `mcp/McpPage.tsx`) — a preocupação de fundo (LGPD) é
+válida para a ANM também, mas a resolução citada é específica do Judiciário; vale
+revisar com a área jurídica da ANM qual normativo equivalente citar, quando for a hora.
+
+`npm run check` (0 erros) e `npm test` (458/458) seguem passando. Validado visualmente
+num browser real (mesmo processo da seção 9.4): tela de login e home em modo ADM sem
+nenhum resquício visual do TRF2, `<title>` já mostrando "SIA-ANM".

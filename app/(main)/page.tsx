@@ -162,7 +162,7 @@ export default async function HomePage() {
             icon: faPlug,
             title: "MCP",
             subtitle: "Model Context Protocol",
-            description: "Integre as ferramentas do Apoia com clientes de IA como o Claude",
+            description: "Integre as ferramentas do SIA-ANM com clientes de IA como o Claude",
             href: "/mcp",
             color: "text-primary",
             mode: 'JUDICIAL'
@@ -173,9 +173,9 @@ export default async function HomePage() {
         <Container className="mt-4" fluid={false}>
             {/* Header Section */}
             <div className="text-center mb-4">
-                <h1 className="display-4 mb-0">Bem-vindo à Apoia</h1>
+                <h1 className="display-4 mb-0">Bem-vindo ao SIA-ANM</h1>
                 <p className="lead text-body-tertiary">
-                    Plataforma de Inteligência Artificial para Magistrados e Servidores do Poder Judiciário
+                    Plataforma de Inteligência Artificial para servidores da ANM
                 </p>
                 <ApiKeyMissing />
 
@@ -226,12 +226,12 @@ export default async function HomePage() {
                 <div className="bg-light rounded p-4 mb-4">
                     <Row>
                         <Col>
-                            <h3 className="h4 mb-3">Sobre a Apoia</h3>
+                            <h3 className="h4 mb-3">Sobre o SIA-ANM</h3>
                             <p>
-                                A Apoia é uma ferramenta de Inteligência Artificial Generativa que oferece diversas funcionalidades para otimizar o trabalho de magistrados, servidores e operadores do Direito.
-                                Integrada a sistemas do Judiciário, como o DataLake/Codex, a Apoia permite acesso seguro às peças dos processos e oferece recursos de análise e automação de atividades complexas.
+                                O SIA-ANM é uma ferramenta de Inteligência Artificial Generativa que oferece diversas funcionalidades para otimizar o trabalho de servidores da ANM.
+                                Integrada ao SEI-ANM, permite acesso seguro às peças dos processos administrativos e oferece recursos de análise e automação de atividades complexas.
                             </p>
-                            <p>As principais vantagens da Apoia incluem:</p>
+                            <p>As principais vantagens do SIA-ANM incluem:</p>
                             <ul className="list-unstyled">
                                 <li>• Obtenção de peças diretamente pelo número do processo</li>
                                 <li>• Decisão de próximos passos com base na lista de peças</li>
@@ -240,7 +240,7 @@ export default async function HomePage() {
                                 <li>• Proteção de informações sigilosas por meio de APIs próprias</li>
                             </ul>
                             <p>
-                                Para saber mais e explorar todas as funcionalidades, consulte o <Link href="https://trf2.gitbook.io/apoia">Manual da Apoia</Link>.
+                                O SIA-ANM é um fork do <Link href="https://github.com/trf2-jus-br/apoia">Apoia</Link>, projeto original do TRF2 — a <Link href="https://trf2.gitbook.io/apoia">documentação original</Link> ainda se aplica à maior parte das funcionalidades (prompts, biblioteca, revisão de texto), exceto pela integração com o SEI-ANM, que é própria da ANM.
                             </p>
                             <p className="mb-0">
                                 Versão: {version}

@@ -3,7 +3,6 @@ import { getServerSession } from "next-auth/next"
 import React from 'react'
 import { redirect } from 'next/navigation'
 import Version from '@/components/version'
-import Image from 'next/image'
 import authOptions from '@/app/api/auth/[...nextauth]/options'
 import CredentialsForm from './credentials-form'
 import Provider from './provider'
@@ -33,8 +32,8 @@ const Signin = async ({ searchParams }) => {
         <div className="p-3 bg-white md:flex-1">
             <div className="container content">
                 <div className="px-4 my-3 text-center">
-                    <Image src="/apoia-logo-transp.png" width={200} height={200 * 271 / 250} alt="Apoia Logo" className="mb-2" />
-                    <Image src="/apoia-logo-texto-transp.png" width={48 * 1102 / 478} height={48} alt="Apoia Logo" className="mb-2" />
+                    <h1 className="fw-bold mb-2">SIA-ANM</h1>
+                    <p className="text-muted">Sistema de Inteligência Artificial da ANM</p>
                 </div>
 
                 <div className="text-center mt-3">
