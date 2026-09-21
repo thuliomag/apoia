@@ -371,3 +371,116 @@ revisar com a área jurídica da ANM qual normativo equivalente citar, quando fo
 `npm run check` (0 erros) e `npm test` (458/458) seguem passando. Validado visualmente
 num browser real (mesmo processo da seção 9.4): tela de login e home em modo ADM sem
 nenhum resquício visual do TRF2, `<title>` já mostrando "SIA-ANM".
+
+## 11. Guia rápido: rodar localmente no macOS (só terminal)
+
+Passo a passo completo, do zero, assumindo só terminal (Terminal.app/iTerm) + Git —
+sem precisar abrir o github.com em nenhum momento. Rode cada bloco em ordem; comandos
+`brew`/`psql`/`npm` são idempotentes (rodar de novo não quebra nada).
+
+**1. Ferramentas de base** (pule o que já tiver — `brew --version`, `git --version`,
+`node --version` para checar):
+
+```bash
+# Homebrew (gerenciador de pacotes do macOS) — pula se `brew --version` já funcionar
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Git e Node.js 22 — pula o que já tiver
+brew install git node@22
+echo 'export PATH="/opt/homebrew/opt/node@22/bin:$PATH"' >> ~/.zshrc   # Apple Silicon
+# echo 'export PATH="/usr/local/opt/node@22/bin:$PATH"' >> ~/.zshrc   # Intel — use esta linha em vez da de cima
+source ~/.zshrc
+```
+
+**2. PostgreSQL local** (sem Docker — mais simples no Mac):
+
+```bash
+brew install postgresql@16
+brew services start postgresql@16
+
+# postgresql@16 é "keg-only" — o brew não coloca o psql no PATH sozinho:
+echo 'export PATH="'"$(brew --prefix postgresql@16)"'/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+
+# Cria um usuário/banco dedicados (rode só uma vez)
+psql postgres -c "CREATE ROLE apoia WITH LOGIN PASSWORD 'apoia' SUPERUSER;"
+psql postgres -c "CREATE DATABASE apoia OWNER apoia;"
+```
+
+**3. Clonar o repositório e entrar no branch da ANM:**
+
+```bash
+cd ~/Developer   # ou a pasta que preferir para projetos
+git clone https://github.com/thuliomag/apoia.git
+cd apoia
+git checkout anm-adaptacao
+npm install
+```
+
+**4. Carregar o schema base do banco** (as migrations seguintes rodam sozinhas
+quando a aplicação sobe, graças ao 9.2/seção 8):
+
+```bash
+psql -U apoia -h 127.0.0.1 -d apoia -f migrations/postgres/init.sql
+```
+
+**5. Criar o `.env.local`** (fica só na sua máquina, nunca é commitado — já está no
+`.gitignore`). Copie e cole o bloco inteiro:
+
+```bash
+cat > .env.local << 'ENVEOF'
+NEXT_PUBLIC_BASE_URL=http://localhost:8081
+NEXTAUTH_URL_INTERNAL=http://localhost:8081
+NEXTAUTH_URL=http://localhost:8081
+NEXTAUTH_SECRET=CHANGE_ME_1
+JWT_SECRET=CHANGE_ME_2
+JWT_ISSUER=sia-anm.local
+JWT_AUDIENCE=sia-anm.local
+PWD_SECRET=CHANGE_ME_3
+DATABASE_SECRET=CHANGE_ME_4
+CONFIDENTIALITY_LEVEL_MAX=0
+MIGRATE_ON_START=1
+DISABLE_DOCUMENT_CACHE=1
+DB_CLIENT=pg
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_USER=apoia
+DB_PASSWORD=apoia
+DB_DATABASE=apoia
+DEV_LOCAL_LOGIN=1
+SYSTEM_MAPPING=ANM:1
+ENVEOF
+
+# Substitui os placeholders CHANGE_ME_N por strings aleatórias de verdade:
+for n in 1 2 3 4; do
+  sed -i '' "s/CHANGE_ME_$n/$(openssl rand -hex 32)/" .env.local
+done
+```
+
+**6. Subir a aplicação:**
+
+```bash
+npm run dev
+```
+
+Abra `http://localhost:8081/auth/signin`, clique em **"Acessar com Login local
+(dev)"**, depois entre em `http://localhost:8081/adm` — é a home em modo
+administrativo (SEI), já com a identidade SIA-ANM. `Ctrl+C` no terminal para parar.
+
+**7. Para pegar atualizações minhas depois** (sem precisar abrir o GitHub):
+
+```bash
+cd ~/Developer/apoia   # ou onde você clonou
+git checkout anm-adaptacao
+git pull origin anm-adaptacao
+npm install   # só se package.json tiver mudado
+npm run dev
+```
+
+**Problemas comuns:**
+- `psql: command not found` → `brew link postgresql@16` (ou abra um terminal novo
+  depois do `brew install`).
+- Porta 8081 ocupada → algum `npm run dev` antigo ainda rodando; `Ctrl+C` nele ou
+  `lsof -i :8081` para achar o processo e `kill <PID>`.
+- Erro de migration ao rodar `npm run dev` pela primeira vez → confirme que rodou o
+  passo 4 (`init.sql`) antes.
